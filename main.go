@@ -90,15 +90,19 @@ func main() {
 	}
 
 	filePath := filepath.Join(rootDir, "config.json")
-
 	if err := jsonParser(filePath); err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
 	http.HandleFunc("/", requestHandler)
 
-	log.Println("Server running on http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal("HTTP Server Error:", err)
-	}
+	// Start HTTP server in goroutine
+	go func() {
+		log.Println("Server running on http://localhost:8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatal("HTTP Server Error:", err)
+		}
+	}()
+
+	select {}
 }
