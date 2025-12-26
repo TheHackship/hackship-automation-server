@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"script_trigger_server/runner"
 )
 
 type RequestBody struct {
@@ -17,6 +17,7 @@ type RequestBody struct {
 const AUTH_TOKEN = "HACKSHIP-COMM"
 
 // global config map
+var scriptChan = make(chan string)
 var serviceDir map[string]map[string]string
 
 func jsonParser(filePath string) error {
@@ -34,19 +35,9 @@ func jsonParser(filePath string) error {
 	return nil
 }
 
-func scriptRuntime(scriptPath string) {
-	go func() {
-		cmd := exec.Command("/bin/bash", scriptPath)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("script failed: %v\noutput: %s", err, output)
-			return
-		}
-		log.Printf("script executed successfully:\n%s", output)
-	}()
-}
-
 func requestHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB
+
 	// Only allow POST
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -77,13 +68,14 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scriptRuntime(scriptPath)
+	scriptChan <- scriptPath
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("script started"))
 }
 
 func main() {
+	// Init serviceScriptPath map
 	rootDir, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
@@ -94,10 +86,13 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	http.HandleFunc("/", requestHandler)
+	// Start script runner
+	r := runner.NewRunner(scriptChan)
+	go r.Start()
 
 	// Start HTTP server in goroutine
 	go func() {
+		http.HandleFunc("/", requestHandler)
 		log.Println("Server running on http://localhost:8080")
 		if err := http.ListenAndServe(":8080", nil); err != nil {
 			log.Fatal("HTTP Server Error:", err)
