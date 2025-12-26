@@ -4,38 +4,31 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"path/filepath"
 	"script_trigger_server/runner"
 	"script_trigger_server/server"
 )
 
-var scriptChan = make(chan string)
-var serviceDir map[string]map[string]string
-
-func jsonParser(filePath string) error {
+func configFileParser(filePath string) (map[string]map[string]string, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	serviceDir = make(map[string]map[string]string)
+	serviceDir := make(map[string]map[string]string)
 
 	if err := json.Unmarshal(data, &serviceDir); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return serviceDir, nil
 }
 
 func main() {
-	// Init serviceScriptPath map
-	rootDir, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
+	scriptChan := make(chan string)
 
-	filePath := filepath.Join(rootDir, "config.json")
-	if err := jsonParser(filePath); err != nil {
+	// Parse config file
+	configMap, err := configFileParser("./config.json")
+	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
@@ -44,7 +37,7 @@ func main() {
 	go r.Start()
 
 	// Start HTTP server in goroutine
-	s := server.NewServer(serviceDir, scriptChan)
+	s := server.NewServer(configMap, scriptChan)
 	go s.Start()
 
 	select {}
